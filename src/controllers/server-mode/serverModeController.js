@@ -1034,19 +1034,22 @@ const serverModeController = async (req, res) => {
     try {
         const ssh = new NodeSSH();
         const response = [];
-        const { projectName, inputDir, testType, email, sampleIds, numberOfSamples } = req.body;
-        const { rows: servers } = await db.query('SELECT * FROM server_systems ORDER BY id');
+        const { projectName, remoteInputDir, testType, email, sampleIds, numberOfSamples ,serverId } = req.body;
+        const { rows: servers } = await db.query('SELECT * FROM server_systems where id = $1 ORDER BY id',[serverId]);
+        console.log('server in serverModeController:', servers);
 
-        const { rows: assignedSubtasks } = await db.query('SELECT server_user FROM SubTasks WHERE status = $1', ['running']);
-        const assignedUsers = assignedSubtasks.map(row => row.server_user);
+        // const { rows: assignedSubtasks } = await db.query('SELECT server_user FROM SubTasks WHERE status = $1', ['running']);
+        // const assignedUsers = assignedSubtasks.map(row => row.server_user);
 
-        let serverIndex = 0;
-        if (assignedUsers.length > 0) {
-            const lastAssignedUser = assignedUsers[assignedUsers.length - 1];
-            serverIndex = servers.findIndex(s => s.user === lastAssignedUser);
-            serverIndex = (serverIndex + 1) % servers.length;
-        }
-        const server = servers[serverIndex];
+        // let serverIndex = 0;
+        // if (assignedUsers.length > 0) {
+        //     const lastAssignedUser = assignedUsers[assignedUsers.length - 1];
+        //     serverIndex = servers.findIndex(s => s.user === lastAssignedUser);
+        //     serverIndex = (serverIndex + 1) % servers.length;
+        // }
+        const server = servers[0];
+
+        console.log('server:', server);
 
         const remoteDir = path.join(server.output_dir, projectName);
 
@@ -1074,8 +1077,8 @@ const serverModeController = async (req, res) => {
         const formattedDateTime = `${formattedDate}_${formattedTime}`;
         const outputDir = path.join(remoteDir, 'outputDir_' + formattedDateTime);
         const logPath = path.join(remoteDir, 'logs')
-        const inputDirName = path.basename(inputDir);
-        const remoteInputDir = path.join(remoteDir, inputDirName);
+        // const inputDirName = path.basename(inputDir);
+        // const remoteInputDir = path.join(remoteDir, inputDirName);
 
         const tempDir = '/tmp/servermode';
         fs.mkdirSync(tempDir, { recursive: true });
@@ -1092,12 +1095,12 @@ const serverModeController = async (req, res) => {
             throw new Error(mkdirResult.stderr);
         }
 
-        await uploadFastqFilesToFlask({
-            host: server.host,
-            username: server.user_name,
-            projectDirPath: remoteInputDir,
-            files: fs.readdirSync(inputDir).map(file => path.join(inputDir, file))
-        });
+        // await uploadFastqFilesToFlask({
+        //     host: server.host,
+        //     username: server.user_name,
+        //     projectDirPath: remoteInputDir,
+        //     files: fs.readdirSync(inputDir).map(file => path.join(inputDir, file))
+        // });
 
         const callBatchPath = await fetchScriptsFromAWS('resources/call_batch.sh', tempDir);
         const neoVarPath = await fetchScriptsFromAWS('resources/NeoVar.sh', tempDir);
@@ -1204,7 +1207,7 @@ const serverModeController = async (req, res) => {
             status: 200,
             taskId,
             projectName,
-            inputDir,
+            remoteInputDir,
             outputDir,
             tempDir: '',
             testType,

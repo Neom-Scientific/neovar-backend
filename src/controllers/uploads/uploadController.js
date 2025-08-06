@@ -221,16 +221,41 @@ const { IncomingForm } = require('formidable');
 
 const XLSX = require('xlsx');
 const db = require('../../db/config');
+const { NodeSSH } = require('node-ssh');
+const { default: axios } = require('axios');
+const FormData = require('form-data');
+
+
+let privateKey;
+if (process.env.SSH_PRIVATE_KEY) {
+  privateKey = Buffer.from(process.env.SSH_PRIVATE_KEY.replace(/\\n/g, '\n'));
+}
+
+async function uploadFastqFilesToFlask({ username, projectDirPath, files, host, originalFilename }) {
+  await Promise.all(files.map(async (filePath, idx) => {
+    const form = new FormData();
+    // Use originalFilename if provided, else fallback to filePath's basename
+    form.append('file', fs.createReadStream(filePath), { filename: path.basename(originalFilename || filePath) });
+    form.append('username', username);
+    form.append('project_dirpath', projectDirPath);
+
+    try {
+      const res = await axios.post(`http://${host}:8702/upload`, form, {
+        headers: form.getHeaders(),
+      });
+      console.log('Flask upload response:', res.data);
+    } catch (err) {
+      console.error('Flask upload error:', err);
+    }
+  }));
+  console.log('All files uploaded to Flask');
+}
+
 
 const uploadController = async (req, res) => {
   try {
+    const ssh = new NodeSSH();
     const matchIds = [];
-    // const form = formidable({
-    //   multiples: true,
-    //   keepExtensions: true,
-    //   maxTotalFileSize: 150 * 1024 * 1024 * 1024, // 150GB
-    //   maxFileSize: 150 * 1024 * 1024 * 1024, // 150GB
-    // });
     const form = new IncomingForm({
       multiples: true,
       keepExtensions: true,
@@ -243,19 +268,49 @@ const uploadController = async (req, res) => {
         return res.status(500).json({ error: err.message });
       }
 
+
+      const { rows: servers } = await db.query('SELECT * FROM server_systems ORDER BY id');
+      const { rows: assignedSubtasks } = await db.query('SELECT server_user FROM SubTasks WHERE status = $1', ['running']);
+      const assignedUsers = assignedSubtasks.map(row => row.server_user);
+
+      let serverIndex = 0;
+      if (assignedUsers.length > 0) {
+        const lastAssignedUser = assignedUsers[assignedUsers.length - 1];
+        serverIndex = servers.findIndex(s => s.user === lastAssignedUser);
+        serverIndex = (serverIndex + 1) % servers.length;
+      }
+
+      const server = servers[serverIndex];
+      console.log('server:', server);
+
+      await ssh.connect({
+        host: server.host,
+        username: server.user_name,
+        port: server.port,
+        privateKey: privateKey.toString()
+      })
+
       const email = Array.isArray(fields.email) ? fields.email[0] : fields.email;
-      const tempDir = path.join(os.tmpdir(), 'uploads');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
+      const projectName = Array.isArray(fields.projectName) ? fields.projectName[0] : fields.projectName;
+      // const tempDir = path.join(os.tmpdir(), 'uploads');
+      // if (!fs.existsSync(tempDir)) {
+      //   fs.mkdirSync(tempDir, { recursive: true });
+      // }
+
+      const projectDir = path.join(server.output_dir, projectName);
+      if (!fs.existsSync(projectDir)) {
+        fs.mkdirSync(projectDir, { recursive: true });
       }
 
       // Create a single upload directory for the session
-      const folderName = files.file && Array.isArray(files.file)
-        ? path.dirname(files.file[0].originalFilename)
-        : path.dirname(files.file.originalFilename);
-      const uploadDir = path.join(tempDir, folderName);
+
+      const folderName = path.dirname(files.file[1].originalFilename);
+      console.log('folderName:', folderName);
+      const uploadDir = path.join(projectDir, folderName);
+      console.log('uploadDir:', uploadDir);
       if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+        // fs.mkdirSync(uploadDir, { recursive: true });
+        await ssh.execCommand(`mkdir -p ${uploadDir}`);
       }
 
       const fileList = Array.isArray(files.file) ? files.file : [files.file];
@@ -269,8 +324,15 @@ const uploadController = async (req, res) => {
 
         if (lowerCaseDestPath.endsWith('.xls') || lowerCaseDestPath.endsWith('.xlsx')) {
           try {
-            fs.copyFileSync(file.filepath, destPath);
-            const fileBuffer = fs.readFileSync(destPath);
+            await uploadFastqFilesToFlask({
+              username: server.user_name,
+              projectDirPath: uploadDir,
+              files: [file.filepath],
+              host: server.host,
+              originalFilename: file.originalFilename
+            });
+
+            const fileBuffer = fs.readFileSync(file.filepath);
             const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
             const sheetName = workbook.SheetNames[0];
             const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
@@ -282,6 +344,8 @@ const uploadController = async (req, res) => {
               });
               return res.status(400).json(result);
             }
+
+            console.log('sheetData:', sheetData);
             const fastqFiles = fileList.filter(file =>
               file.originalFilename.toLowerCase().endsWith('.fastq') ||
               file.originalFilename.toLowerCase().endsWith('.fastq.gz') ||
@@ -306,6 +370,8 @@ const uploadController = async (req, res) => {
               })
               .filter(Boolean);
 
+            console.log('extracted Sample IDs:', sampleIds);
+
             referenceSampleIds.push(...sampleIds);
           } catch (err) {
             console.error('Error processing Excel file:', err);
@@ -323,7 +389,9 @@ const uploadController = async (req, res) => {
       for (const file of fileList) {
         const destPath = path.join(uploadDir, path.basename(file.originalFilename || 'default'));
         const lowerCaseDestPath = destPath.toLowerCase();
+        const originalBaseName = path.basename(file.originalFilename || '');
 
+        console.log('file.filepath:', file.filepath);
         if (
           lowerCaseDestPath.endsWith('.fastq') ||
           lowerCaseDestPath.endsWith('.fastq.gz') ||
@@ -331,7 +399,8 @@ const uploadController = async (req, res) => {
           lowerCaseDestPath.endsWith('.fq.gz')
         ) {
           try {
-            fs.copyFileSync(file.filepath, destPath);
+            // fs.copyFileSync(file.filepath, destPath);
+            // await ssh.putFile(file.filepath, destPath);
 
             let baseName = path.basename(file.originalFilename || '').replace(/\.(fastq|fq)(\.gz)?$/i, '');
             baseName = baseName.replace(/(_R[12]|_[12])$/, '').trim().normalize();
@@ -341,18 +410,34 @@ const uploadController = async (req, res) => {
               return baseName === normalizedId;
             });
 
+            console.log('baseName:', baseName);
+            console.log('referenceSampleIds:', referenceSampleIds);
+            console.log('matchedId:', matchedId);
+
             if (matchedId) {
               if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
               const targetPath = path.join(uploadDir, path.basename(destPath));
-              fs.copyFileSync(destPath, targetPath);
+              // fs.copyFileSync(destPath, targetPath);
+              // await ssh.execCommand(`cp ${destPath} ${targetPath}`);
+              // await uploadFastqFilesToFlask({
+              //   username: server.user_name,
+              //   projectDirPath: uploadDir,
+              //   files: [file.filepath],
+              //   host: server.host,
+              //   originalFilename: file.originalFilename // <-- pass the original filename
+              // });
+
+              await ssh.putFile(file.filepath, targetPath);
 
               result.push({
-                message: `${file.originalFilename} copied to input directory`,
+                message: `${file.originalFilename} uploaded to Flask server`,
                 status: 200,
-                inputDir: uploadDir,
-                filePath: targetPath,
-                sampleId: matchedId
+                remoteInputDir: uploadDir,
+                filePath: file.filepath,
+                sampleId: matchedId,
+                serverId: server.id,
+                remoteDir: projectDir,
               });
             } else {
               console.error(`❌ File "${file.originalFilename}" does not match any Sample ID from Excel.`);
@@ -375,6 +460,8 @@ const uploadController = async (req, res) => {
           }
         }
       }
+
+      ssh.dispose();
 
       return res.status(200).json(result);
     });
