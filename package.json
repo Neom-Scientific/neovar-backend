@@ -1,0 +1,22 @@
+{
+  "dependencies": {
+    "@aws-sdk/client-iam": "^3.859.0",
+    "@aws-sdk/client-s3": "^3.859.0",
+    "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
+    "child_process": "^1.0.2",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "form-data": "^4.0.4",
+    "formidable": "^3.5.4",
+    "jsonwebtoken": "^9.0.2",
+    "node-ssh": "^13.2.1",
+    "nodemailer": "^7.0.5",
+    "pg": "^8.16.3",
+    "ssh2": "^1.16.0",
+    "xlsx": "^0.18.5"
+  }
+}
