@@ -305,9 +305,9 @@ const uploadController = async (req, res) => {
       // Create a single upload directory for the session
 
       const folderName = path.dirname(files.file[1].originalFilename);
-      console.log('folderName:', folderName);
+      // console.log('folderName:', folderName);
       const uploadDir = path.join(projectDir, folderName);
-      console.log('uploadDir:', uploadDir);
+      // console.log('uploadDir:', uploadDir);
       if (!fs.existsSync(uploadDir)) {
         // fs.mkdirSync(uploadDir, { recursive: true });
         await ssh.execCommand(`mkdir -p ${uploadDir}`);
@@ -345,7 +345,7 @@ const uploadController = async (req, res) => {
               return res.status(400).json(result);
             }
 
-            console.log('sheetData:', sheetData);
+            // console.log('sheetData:', sheetData);
             const fastqFiles = fileList.filter(file =>
               file.originalFilename.toLowerCase().endsWith('.fastq') ||
               file.originalFilename.toLowerCase().endsWith('.fastq.gz') ||
@@ -370,7 +370,7 @@ const uploadController = async (req, res) => {
               })
               .filter(Boolean);
 
-            console.log('extracted Sample IDs:', sampleIds);
+            // console.log('extracted Sample IDs:', sampleIds);
 
             referenceSampleIds.push(...sampleIds);
           } catch (err) {
@@ -391,7 +391,7 @@ const uploadController = async (req, res) => {
         const lowerCaseDestPath = destPath.toLowerCase();
         const originalBaseName = path.basename(file.originalFilename || '');
 
-        console.log('file.filepath:', file.filepath);
+        // console.log('file.filepath:', file.filepath);
         if (
           lowerCaseDestPath.endsWith('.fastq') ||
           lowerCaseDestPath.endsWith('.fastq.gz') ||
@@ -410,9 +410,9 @@ const uploadController = async (req, res) => {
               return baseName === normalizedId;
             });
 
-            console.log('baseName:', baseName);
-            console.log('referenceSampleIds:', referenceSampleIds);
-            console.log('matchedId:', matchedId);
+            // console.log('baseName:', baseName);
+            // console.log('referenceSampleIds:', referenceSampleIds);
+            // console.log('matchedId:', matchedId);
 
             if (matchedId) {
               if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });

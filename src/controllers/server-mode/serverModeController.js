@@ -1036,7 +1036,7 @@ const serverModeController = async (req, res) => {
         const response = [];
         const { projectName, remoteInputDir, testType, email, sampleIds, numberOfSamples ,serverId } = req.body;
         const { rows: servers } = await db.query('SELECT * FROM server_systems where id = $1 ORDER BY id',[serverId]);
-        console.log('server in serverModeController:', servers);
+        // console.log('server in serverModeController:', servers);
 
         // const { rows: assignedSubtasks } = await db.query('SELECT server_user FROM SubTasks WHERE status = $1', ['running']);
         // const assignedUsers = assignedSubtasks.map(row => row.server_user);

@@ -22,7 +22,7 @@ router.post('/auth/signup', signUpController);
 
 
 router.get('/read-counter-json',readCounterController);
-router.post('run-analysis',runAnalysisController);
+router.post('/run-analysis',runAnalysisController);
 router.post('/progress',progressController);
 router.post('/server-mode',serverModeController);
 router.post('/uploads',uploadsController);
