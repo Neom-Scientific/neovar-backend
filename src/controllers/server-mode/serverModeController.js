@@ -1034,8 +1034,16 @@ const serverModeController = async (req, res) => {
     try {
         const ssh = new NodeSSH();
         const response = [];
-        const { projectName, remoteInputDir, testType, email, sampleIds, numberOfSamples ,serverId } = req.body;
-        const { rows: servers } = await db.query('SELECT * FROM server_systems where id = $1 ORDER BY id',[serverId]);
+        const { projectName, remoteInputDir, testType, email, sampleIds, numberOfSamples ,server_user } = req.body;
+        console.log('projectName:', projectName);
+        console.log('remoteInputDir:', remoteInputDir);
+        console.log('testType:', testType);
+        console.log('email:', email);
+        console.log('sampleIds:', sampleIds);
+        console.log('numberOfSamples:', numberOfSamples);
+        console.log('server_user:', server_user);
+        
+        const { rows: servers } = await db.query('SELECT * FROM server_systems where user_name = $1 ORDER BY id',[server_user]);
         // console.log('server in serverModeController:', servers);
 
         // const { rows: assignedSubtasks } = await db.query('SELECT server_user FROM SubTasks WHERE status = $1', ['running']);
@@ -1047,6 +1055,7 @@ const serverModeController = async (req, res) => {
         //     serverIndex = servers.findIndex(s => s.user === lastAssignedUser);
         //     serverIndex = (serverIndex + 1) % servers.length;
         // }
+        console.log('servers:', servers);
         const server = servers[0];
 
         console.log('server:', server);
@@ -1088,7 +1097,7 @@ const serverModeController = async (req, res) => {
             username: server.user_name,
             privateKey: privateKey.toString(),
         });
-        const mkdirCmd = `mkdir -p ${remoteDir} ${outputDir} ${logPath} ${remoteInputDir}`;
+        const mkdirCmd = `mkdir -p ${remoteDir} ${outputDir} ${logPath}`;
         const mkdirResult = await ssh.execCommand(mkdirCmd);
         if (mkdirResult.stderr) {
             console.error('mkdir error:', mkdirResult.stderr);

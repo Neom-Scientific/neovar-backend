@@ -11,7 +11,8 @@ const readCounterController = require('../src/controllers/read-counter-json/read
 const runAnalysisController = require('../src/controllers/run-analysis/runAnalysisController');
 const progressController = require('../src/controllers/progress/progressController');
 const serverModeController = require('../src/controllers/server-mode/serverModeController');
-const uploadsController = require('../src/controllers/uploads/uploadController');
+const uploadController = require('./controllers/uploads/uploadController');
+const mergeController = require('./controllers/merge/mergeController');
 
 router.get('/auth/protected-route',protectedRouteController);
 router.post('/auth/refresh-token',refreshTokenController);
@@ -25,6 +26,7 @@ router.get('/read-counter-json',readCounterController);
 router.post('/run-analysis',runAnalysisController);
 router.post('/progress',progressController);
 router.post('/server-mode',serverModeController);
-router.post('/uploads',uploadsController);
+router.post('/uploads', uploadController.upload.any(), uploadController.uploadController);
+router.post('/merge',mergeController)
 
 module.exports = router;
